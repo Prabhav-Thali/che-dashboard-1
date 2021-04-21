@@ -21,7 +21,7 @@ COPY .yarnrc.yml /dashboard/
 WORKDIR /dashboard
 RUN yarn install
 COPY . /dashboard/
-RUN yarn compile
+RUN yarn compile --network-timeout 600000
 
 FROM docker.io/httpd:2.4.43-alpine
 RUN sed -i 's|    AllowOverride None|    AllowOverride All|' /usr/local/apache2/conf/httpd.conf && \
