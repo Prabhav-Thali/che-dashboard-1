@@ -21,6 +21,10 @@ import {
   TextContent,
   TextVariants,
 } from '@patternfly/react-core';
+import Pluralize from 'react-pluralize';
+import { DisposableCollection } from '../../services/helpers/disposable';
+
+const RELOAD_TIMEOUT_SEC = 30;
 
 type Props = {};
 type State = {
@@ -29,9 +33,13 @@ type State = {
   errorInfo?: ErrorInfo;
   expanded: boolean;
   activeItems: any;
+  shouldReload: boolean;
+  reloadAfter: number;
 };
 
 export class ErrorBoundary extends React.PureComponent<Props, State> {
+
+  private readonly toDispose = new DisposableCollection();
 
   constructor(props: Props) {
     super(props);
@@ -40,6 +48,8 @@ export class ErrorBoundary extends React.PureComponent<Props, State> {
       hasError: false,
       expanded: false,
       activeItems: {},
+      shouldReload: false,
+      reloadAfter: RELOAD_TIMEOUT_SEC,
     };
   }
 
@@ -55,50 +65,137 @@ export class ErrorBoundary extends React.PureComponent<Props, State> {
       error,
       errorInfo,
     });
+
+    if (this.testResourceNotFound(error)) {
+      this.setState({
+        shouldReload: true,
+      });
+      this.startCountdown();
+    }
   }
 
-  private handleOnClick() {
+  public componentWillUnmount(): void {
+    this.toDispose.dispose();
+  }
+
+  private testResourceNotFound(error: Error): boolean {
+    return /loading chunk [\d]+ failed/i.test(error.message);
+  }
+
+  private handleToggleViewStack() {
     const expanded = !this.state.expanded;
     this.setState({
       expanded,
     });
   }
 
-  render(): React.ReactNode {
-    const { hasError, error, errorInfo, expanded } = this.state;
+  private handleReloadNow(): void {
+    window.location.reload();
+  }
 
-    if (hasError) {
-      const actionTitle = expanded ? 'Hide stack' : 'View stack';
-      const errorName = error?.name ? error.name : Error;
-      const errorMessage = error?.message ? ': ' + error.message : '';
-      return (
-        <PageSection
-          variant={PageSectionVariants.light}
-          isFilled={true}
-        >
-          <Alert
-            isInline
-            variant={AlertVariant.danger}
-            title={errorName + errorMessage}
-            actionLinks={
-              <React.Fragment>
-                <AlertActionLink onClick={() => this.handleOnClick()}>
-                  {actionTitle}
-                </AlertActionLink>
-              </React.Fragment>
-            }
-          >
-            {expanded && errorInfo && <TextContent>
-              <Text component={TextVariants.pre}>
-                {errorInfo.componentStack}
-              </Text>
-            </TextContent>}
-          </Alert>
-        </PageSection>
-      );
+  private handleStopCountdown(): void {
+    this.toDispose.dispose();
+  }
+
+  private startCountdown(): void {
+    const id = window.setInterval(() => {
+      const reloadAfter = this.state.reloadAfter - 1;
+      this.setState({
+        reloadAfter,
+      });
+      if (reloadAfter === 0) {
+        this.handleReloadNow();
+      }
+    }, 1000);
+
+    this.toDispose.push({
+      dispose: () => window.clearInterval(id)
+    });
+  }
+
+  private buildErrorMessageAlert(): React.ReactNode {
+    const { error, errorInfo, expanded } = this.state;
+
+    const actionErrorTitle = expanded ? 'Hide stack' : 'View stack';
+    const errorName = error?.name ? error.name : Error;
+    const errorMessage = error?.message ? ': ' + error.message : '';
+
+    return (
+      <Alert
+        isInline
+        variant={AlertVariant.danger}
+        title={errorName + errorMessage}
+        actionLinks={
+          <AlertActionLink onClick={() => this.handleToggleViewStack()}>
+            {actionErrorTitle}
+          </AlertActionLink>
+        }
+      >
+        {expanded && errorInfo && (
+          <TextContent>
+            <Text component={TextVariants.pre}>
+              {errorInfo.componentStack}
+            </Text>
+          </TextContent>
+        )}
+      </Alert>
+    );
+  }
+
+  private buildReloadAlert(): React.ReactNode {
+    const { reloadAfter, shouldReload: willReload } = this.state;
+
+    if (willReload === false) {
+      return;
     }
 
-    return this.props.children;
+    return (
+      <Alert
+        isInline
+        variant={AlertVariant.warning}
+        title={
+          <React.Fragment>
+            <span>This page is reloading in&nbsp;</span>
+            <Pluralize
+              singular={'second'}
+              count={reloadAfter}
+            />
+          </React.Fragment>
+        }
+        actionLinks={
+          <React.Fragment>
+            <AlertActionLink onClick={() => this.handleReloadNow()}>
+              Reload now
+            </AlertActionLink>
+            <AlertActionLink onClick={() => this.handleStopCountdown()}>
+              Stop countdown
+            </AlertActionLink>
+          </React.Fragment>
+        }
+      />
+    );
+  }
+
+  render(): React.ReactNode {
+    const { hasError } = this.state;
+
+    if (!hasError) {
+      return this.props.children;
+    }
+
+    const errorMessageAlert = this.buildErrorMessageAlert();
+    const reloadAlert = this.buildReloadAlert();
+
+    return (
+      <PageSection
+        variant={PageSectionVariants.light}
+        isFilled={true}
+      >
+        {reloadAlert}
+        {errorMessageAlert}
+      </PageSection>
+    );
+
   }
 
 }
