@@ -19,6 +19,7 @@ COPY yarn.lock /dashboard/
 COPY .yarn/releases/yarn-*.cjs /dashboard/.yarn/releases/
 COPY .yarnrc.yml /dashboard/
 WORKDIR /dashboard
+RUN yarn -v
 RUN yarn install
 COPY . /dashboard/
 RUN yarn compile
