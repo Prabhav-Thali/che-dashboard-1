@@ -20,7 +20,9 @@ COPY .yarn/releases/yarn-*.cjs /dashboard/.yarn/releases/
 COPY .yarnrc.yml /dashboard/
 WORKDIR /dashboard
 RUN yarn -v
-RUN yarn install --network-timeout 600000
+RUN node -v
+RUN npm -v
+RUN yarn install
 COPY . /dashboard/
 RUN yarn compile
 
